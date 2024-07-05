@@ -28,9 +28,9 @@ def maybe_isomorphic(graph1, graph2):
 # ASKS FOR WHAT GRAPH TYPE TO GENERATE
 print("You may generate Feynman graphs or vacuum graphs. Answer with 'Yes' or 'No'.")
 feynmanInput = input("Do you want to generate Feynman graphs? ")
-if (not feynmanInput == "Yes" or feynmanInput == "yes"):
+if not (feynmanInput == "Yes" or feynmanInput == "yes"):
     vacuumInput = input("Do you want to generate vacuum graphs? ")
-    if (not vacuumInput == "Yes" or vacuumInput == "yes"):
+    if not (vacuumInput == "Yes" or vacuumInput == "yes"):
         print("Try again")
         exit()
 
@@ -57,8 +57,8 @@ for i in range(1, vertices):
     for graph in vacuums[i-1]:
         for edge_1 in graph.edges:
             for edge_2 in graph.edges:
-                temporary = graph.copy()
                 if not edge_1 == edge_2:
+                    temporary = graph.copy()
                     start1 = edge_1[0]
                     end1 = edge_1[1]
                     start2 = edge_2[0]
@@ -140,7 +140,7 @@ if (feynmanInput == "Yes" or feynmanInput == "yes"):
                     copy.remove_node(node)
 
                     # ENSURES CONNECTEDNESS AND THAT THERE ARE NO CUT EDGES
-                    if nx.is_connected(copy) and nx.has_bridges(copy):
+                    if nx.is_connected(copy) and not nx.has_bridges(copy):
                         copy.add_edge('a', neighbors[0])
                         copy.add_edge('b', neighbors[1])
                         copy.add_edge('c', neighbors[2])
