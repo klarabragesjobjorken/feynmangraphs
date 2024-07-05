@@ -23,8 +23,7 @@ def maybe_isomorphic(graph1, graph2):
         if triple_edges(graph1) == triple_edges(graph2):
             if len(nx.triangles(graph1)) == len(nx.triangles(graph2)):
                 return True
-    else:
-        return False
+    return False
 
 # ASKS FOR WHAT GRAPH TYPE TO GENERATE
 print("You may generate Feynman graphs or vacuum graphs. Answer with 'Yes' or 'No'.")
