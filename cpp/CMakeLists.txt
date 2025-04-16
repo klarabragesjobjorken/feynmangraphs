@@ -3,6 +3,12 @@ project(ComputingFeynman)
 
 set(CMAKE_CXX_STANDARD 17)
 
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GVC REQUIRED libgvc)
 

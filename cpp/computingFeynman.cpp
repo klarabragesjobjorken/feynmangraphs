@@ -2,6 +2,7 @@
 #include <boost/graph/biconnected_components.hpp>
 #include <boost/graph/vf2_sub_graph_iso.hpp>
 #include <boost/program_options.hpp>
+#include <graphviz/gvc.h>
 
 namespace po = boost::program_options;
 
@@ -294,6 +295,65 @@ generate_feynman_graphs(int vertex_count,
   return feynmans;
 }
 
+class SvgGraphRenderer {
+public:
+  SvgGraphRenderer() : current_graph_idx_(0) {
+    gvc_ = gvContext();
+    if (!gvc_) {
+      std::cerr << "Failed to initialize Graphviz context!\n";
+      exit(1);
+    }
+    g_ = agopen(const_cast<char *>("G"), Agundirected, nullptr);
+    agattr(g_, AGNODE, std::string("shape").data(),
+           std::string("circle").data());
+    agattr(g_, AGNODE, std::string("width").data(), std::string("0.2").data());
+    agattr(g_, AGNODE, std::string("label").data(), std::string("").data());
+  }
+
+  ~SvgGraphRenderer() {
+    agclose(g_);
+    gvFreeContext(gvc_);
+  }
+
+  void render_to_svg(const std::string &output_path) {
+    gvLayout(gvc_, g_, "neato");
+    gvRenderFilename(gvc_, g_, "svg", output_path.c_str());
+    gvFreeLayout(gvc_, g_);
+  }
+
+  void add_graph(const Multigraph &multigraph, GraphType graph_type) {
+    std::string clusterName = "cluster" + std::to_string(current_graph_idx_);
+    Agraph_t *subg = agsubg(g_, clusterName.data(), 1);
+
+    agsafeset(subg, std::string("style").data(), std::string("invis").data(),
+              std::string("").data());
+
+    for (const Edge &edge : multigraph.edges()) {
+      int u = multigraph.source(edge), v = multigraph.target(edge);
+      std::string name1 = clusterName + "_" + std::to_string(u);
+      Agnode_t *node1 = agnode(subg, name1.data(), 1);
+      if (graph_type == GraphType::Feynman &&
+          u >= multigraph.node_count() - 4) {
+        agset(node1, std::string("shape").data(), std::string("none").data());
+      }
+      std::string name2 = clusterName + "_" + std::to_string(v);
+      Agnode_t *node2 = agnode(subg, name2.data(), 1);
+      if (graph_type == GraphType::Feynman &&
+          v >= multigraph.node_count() - 4) {
+        agset(node1, std::string("shape").data(), std::string("none").data());
+      }
+      Agedge_t *e = agedge(subg, node1, node2, nullptr, 1);
+    }
+
+    current_graph_idx_++;
+  }
+
+private:
+  GVC_t *gvc_;
+  Agraph_t *g_;
+  int current_graph_idx_;
+};
+
 int main(int argc, char *argv[]) {
   int vertex_count;
   GraphType graph_type;
@@ -350,8 +410,6 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  std::cout << "Vertex count: " << vertex_count << "\n";
-
   if (graph_type == GraphType::Feynman) {
     vertex_count++;
   }
@@ -361,14 +419,23 @@ int main(int argc, char *argv[]) {
   if (graph_type == GraphType::Feynman) {
     std::vector<Multigraph> feynmans =
         generate_feynman_graphs(vertex_count, vacuums);
-    std::cout << feynmans.size() << "\n";
-    for (const Multigraph &graph : feynmans) {
-      graph.print();
+    if (vm.count("output")) {
+      std::cout << "Drawing graphs as svg.\n";
+      SvgGraphRenderer svg_renderer;
+      for (const Multigraph &multigraph : feynmans) {
+        svg_renderer.add_graph(multigraph, GraphType::Feynman);
+      }
+      svg_renderer.render_to_svg(output_path);
     }
+    std::cout << "Generated " << feynmans.size() << " feynman graphs.\n";
   } else {
-    std::cout << vacuums.size() << "\n";
-    for (const Multigraph &graph : vacuums) {
-      graph.print();
+    if (vm.count("output")) {
+      SvgGraphRenderer svg_renderer;
+      for (const Multigraph &multigraph : vacuums) {
+        svg_renderer.add_graph(multigraph, GraphType::Vacuum);
+      }
+      svg_renderer.render_to_svg(output_path);
     }
+    std::cout << "Generated " << vacuums.size() << " vacuum graphs.\n";
   }
 }
