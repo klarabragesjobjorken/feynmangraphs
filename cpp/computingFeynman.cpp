@@ -148,8 +148,11 @@ void Multigraph::print() const {
 }
 
 bool Multigraph::maybe_isomorphic_with(const Multigraph &other) const {
-  std::array<int, 5> multiplicity_distr = {0, 0, 0, 0, 0};
-  std::array<int, 5> other_multiplicity_distr = {0, 0, 0, 0, 0};
+  if (node_count() < 3) {
+    return true;
+  }
+  std::array<int, 4> multiplicity_distr = {0, 0, 0, 0};
+  std::array<int, 4> other_multiplicity_distr = {0, 0, 0, 0};
   for (int u = 0; u < node_count(); u++) {
     for (int v = u; v < node_count(); v++) {
       multiplicity_distr[adj_matrix_[u][v]]++;
