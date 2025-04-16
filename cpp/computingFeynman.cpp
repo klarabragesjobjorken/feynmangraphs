@@ -1,38 +1,11 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/biconnected_components.hpp>
 #include <boost/graph/vf2_sub_graph_iso.hpp>
+#include <boost/program_options.hpp>
 
-bool get_yes_no(const std::string &prompt) {
-  // std::cout << prompt << " (yes/no): ";
-  std::string input;
-  std::cin >> input;
-  std::transform(input.begin(), input.end(), input.begin(),
-                 [](unsigned char c) { return std::tolower(c); });
-  return input == "yes";
-}
+namespace po = boost::program_options;
 
-enum class GraphType { VACUUM, FEYNMAN };
-
-std::optional<GraphType> get_graph_type() {
-  // std::cout << "You may generate Feynman graphs or vacuum graphs.\n";
-  if (get_yes_no("Do you want to generate Feynman graphs?")) {
-    return GraphType::FEYNMAN;
-  } else if (get_yes_no("Do you want to generate vacuum graphs?")) {
-    return GraphType::VACUUM;
-  }
-  return std::nullopt;
-}
-
-std::optional<int> get_vertex_count() {
-  // std::cout << "How many vertices do you want? ";
-  int vertex_count;
-  std::cin >> vertex_count;
-  std::optional<int> vertex_count_opt = std::nullopt;
-  if (!std::cin.fail() && vertex_count > 0) {
-    vertex_count_opt = vertex_count;
-  }
-  return vertex_count_opt;
-}
+enum class GraphType { FEYNMAN, VACUUM };
 
 template <typename Graph1, typename Graph2> class noop_callback {
 public:
@@ -314,25 +287,63 @@ generate_feynman_graphs(int vertex_count,
   return feynmans;
 }
 
-int main() {
-  std::optional<GraphType> graph_type_opt = get_graph_type();
+int main(int argc, char *argv[]) {
+  int vertex_count;
+  GraphType graph_type;
+  std::string output_path;
 
-  if (!graph_type_opt.has_value()) {
-    std::cout << "No graph type selected. Exiting.\n";
-    return 0;
+  po::options_description desc("Allowed options");
+  desc.add_options()("help,h", "Show help message")(
+      "type,t",
+      po::value<std::string>()->default_value("feynman")->notifier(
+          [&](const std::string &s) {
+            if (s == "feynman") {
+              graph_type = GraphType::FEYNMAN;
+            } else if (s == "vacuum") {
+              graph_type = GraphType::VACUUM;
+            } else {
+              throw po::validation_error(
+                  po::validation_error::invalid_option_value, "type", s);
+            }
+          }),
+      "Type of graph to generate: feynman, vacuum")(
+      "output,o", po::value(&output_path),
+      "Optional path to output SVG visualization");
+
+  po::options_description hidden("Hidden options");
+  hidden.add_options()("vertices", po::value(&vertex_count)->required(),
+                       "Number of vertices");
+
+  po::positional_options_description pos_desc;
+  pos_desc.add("vertices", 1);
+
+  po::options_description all_options;
+  all_options.add(desc).add(hidden);
+
+  po::variables_map vm;
+
+  try {
+    po::store(po::command_line_parser(argc, argv)
+                  .options(all_options)
+                  .positional(pos_desc)
+                  .run(),
+              vm);
+
+    if (vm.count("help")) {
+      std::cout << "Usage: computingFeynman <num_vertices> [--type TYPE] "
+                   "[--output FILE]\n\n";
+      std::cout << desc << "\n";
+      return 0;
+    }
+
+    po::notify(vm);
+  } catch (po::error &e) {
+    std::cerr << "Error: " << e.what() << "\n";
+    std::cerr << "Use --help for usage info\n";
+    return 1;
   }
 
-  GraphType graph_type = graph_type_opt.value();
-
-  std::optional<int> vertex_count_opt = get_vertex_count();
-
-  if (!vertex_count_opt.has_value()) {
-    std::cout
-        << "The number of vertices must be a positive integer. Exiting.\n";
-    return 0;
-  }
-
-  int vertex_count = vertex_count_opt.value();
+  std::cout << "Vertex count: " << vertex_count << "\n";
 
   if (graph_type == GraphType::FEYNMAN) {
     vertex_count++;
