@@ -167,7 +167,7 @@ bool Multigraph::maybe_isomorphic_with(const Multigraph &other) const {
 std::vector<Multigraph> generate_vacuum_graphs(int vertex_count) {
   std::vector<std::vector<Multigraph>> vacuums(vertex_count + 1);
 
-  {
+  if (vertex_count > 1) {
     Multigraph g(2);
     g.add_edges(0, 1, 4);
     vacuums[2].push_back(g);
