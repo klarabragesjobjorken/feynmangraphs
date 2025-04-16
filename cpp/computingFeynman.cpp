@@ -5,11 +5,11 @@
 
 namespace po = boost::program_options;
 
-enum class GraphType { FEYNMAN, VACUUM };
+enum class GraphType { Feynman, Vacuum };
 
-template <typename Graph1, typename Graph2> class noop_callback {
+template <typename Graph1, typename Graph2> class NoopCallback {
 public:
-  noop_callback(const Graph1 &, const Graph2 &) {}
+  NoopCallback(const Graph1 &, const Graph2 &) {}
 
   template <typename CorrespondenceMap1To2, typename CorrespondenceMap2To1>
   bool operator()(CorrespondenceMap1To2, CorrespondenceMap2To1) const {
@@ -17,144 +17,151 @@ public:
   }
 };
 
+using Graph =
+    boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS>;
+using Vertex = boost::graph_traits<Graph>::vertex_descriptor;
+using Edge = boost::graph_traits<Graph>::edge_descriptor;
+
 class Multigraph {
-private:
-  using Graph =
-      boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS>;
-  using vertex_descriptor = boost::graph_traits<Graph>::vertex_descriptor;
-  using edge_descriptor = boost::graph_traits<Graph>::edge_descriptor;
-
-  Graph graph;
-  std::vector<std::vector<int>> adj_matrix;
-
 public:
   Multigraph(int node_count)
-      : graph(node_count),
-        adj_matrix(node_count, std::vector<int>(node_count, 0)) {}
+      : graph_(node_count),
+        adj_matrix_(node_count, std::vector<int>(node_count, 0)) {}
 
-  int node_count() const { return boost::num_vertices(graph); }
+  int node_count() const { return boost::num_vertices(graph_); }
 
-  int edge_count() const { return boost::num_edges(graph); }
+  int edge_count() const { return boost::num_edges(graph_); }
 
   void add_edges(int u, int v, int count) {
     for (int i = 0; i < count; i++) {
-      boost::add_edge(u, v, graph);
-      adj_matrix[u][v]++;
-      adj_matrix[v][u]++;
+      boost::add_edge(u, v, graph_);
     }
+    adj_matrix_[u][v] += count;
+    adj_matrix_[v][u] += count;
   }
 
   void add_edge(int u, int v) { add_edges(u, v, 1); }
 
-  auto edges() const { return boost::make_iterator_range(boost::edges(graph)); }
-
-  vertex_descriptor source(edge_descriptor e) const {
-    return boost::source(e, graph);
-  }
-  vertex_descriptor target(edge_descriptor e) const {
-    return boost::target(e, graph);
+  auto edges() const {
+    return boost::make_iterator_range(boost::edges(graph_));
   }
 
-  bool maybe_isomorphic_with(const Multigraph &other) const {
-    std::array<int, 5> multiplicity_distr = {0, 0, 0, 0, 0};
-    std::array<int, 5> other_multiplicity_distr = {0, 0, 0, 0, 0};
-    for (int u = 0; u < node_count(); u++) {
-      for (int v = u; v < node_count(); v++) {
-        multiplicity_distr[adj_matrix[u][v]]++;
-        other_multiplicity_distr[other.adj_matrix[u][v]]++;
-      }
-    }
-    for (int i = 0; i < multiplicity_distr.size(); i++) {
-      if (multiplicity_distr[i] != other_multiplicity_distr[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
+  Vertex source(Edge e) const { return boost::source(e, graph_); }
+  Vertex target(Edge e) const { return boost::target(e, graph_); }
 
-  bool operator==(const Multigraph &other) const {
-    if (!maybe_isomorphic_with(other)) {
-      return false;
-    }
+  bool operator==(const Multigraph &other) const;
 
-    return boost::vf2_graph_iso(
-        graph, other.graph, noop_callback<Graph, Graph>(graph, other.graph));
-  }
+  bool has_articulation_point() const;
+  bool has_bridge() const;
 
-  bool has_articulation_point() const {
-    std::vector<vertex_descriptor> ap;
-    boost::articulation_points(graph, std::back_inserter(ap));
-    return !ap.empty();
-  }
+  void print() const;
 
-  bool has_bridge() const {
-    std::vector<bool> visited(node_count(), false);
-    std::vector<int> tin(node_count(), -1);
-    std::vector<int> low(node_count(), -1);
-    int timer = 0;
+private:
+  Graph graph_;
+  std::vector<std::vector<int>> adj_matrix_;
 
-    std::function<bool(int, int)> dfs = [&](int v, int p) {
-      struct E {
-        int u, v;
-        E(int a, int b) : u(a), v(b) {
-          if (u > v) {
-            std::swap(u, v);
-          }
-        }
-        bool operator<(const E &other) const {
-          return std::tie(u, v) < std::tie(other.u, other.v);
-        }
-      };
-      std::multiset<E> es;
-      for (const edge_descriptor e : edges()) {
-        es.insert(E(source(e), target(e)));
-      }
+  bool maybe_isomorphic_with(const Multigraph &other) const;
+};
 
-      std::vector<std::vector<int>> adj(node_count());
-      for (auto it = es.begin(); it != es.end(); it++) {
-        auto [u, v] = *it;
-        adj[u].push_back(v);
-        adj[v].push_back(u);
-      }
-
-      visited[v] = true;
-      tin[v] = low[v] = timer++;
-      bool parent_skipped = false;
-      for (int to : adj[v]) {
-        if (to == p && !parent_skipped) {
-          parent_skipped = true;
-          continue;
-        }
-        if (visited[to]) {
-          low[v] = std::min(low[v], tin[to]);
-        } else {
-          if (dfs(to, v)) {
-            return true;
-          }
-          low[v] = std::min(low[v], low[to]);
-          if (low[to] > tin[v] && es.count(E(v, to)) == 1)
-            return true;
-        }
-      }
-      return false;
-    };
-
-    for (int i = 0; i < node_count(); ++i) {
-      if (!visited[i] && dfs(i, -1))
-        return true;
-    }
-
+bool Multigraph::operator==(const Multigraph &other) const {
+  if (!maybe_isomorphic_with(other)) {
     return false;
   }
 
-  void print() const {
-    std::cout << node_count() << "\n";
-    std::cout << edge_count() << "\n";
-    for (auto e : edges()) {
-      std::cout << source(e) << " " << target(e) << "\n";
+  return boost::vf2_graph_iso(graph_, other.graph_,
+                              NoopCallback<Graph, Graph>(graph_, other.graph_));
+}
+
+bool Multigraph::has_articulation_point() const {
+  std::vector<Vertex> ap;
+  boost::articulation_points(graph_, std::back_inserter(ap));
+  return !ap.empty();
+}
+
+bool Multigraph::has_bridge() const {
+  std::vector<bool> visited(node_count(), false);
+  std::vector<int> tin(node_count(), -1);
+  std::vector<int> low(node_count(), -1);
+  int timer = 0;
+
+  std::function<bool(int, int)> dfs = [&](int v, int p) {
+    struct E {
+      int u, v;
+      E(int a, int b) : u(a), v(b) {
+        if (u > v) {
+          std::swap(u, v);
+        }
+      }
+      bool operator<(const E &other) const {
+        return std::tie(u, v) < std::tie(other.u, other.v);
+      }
+    };
+    std::multiset<E> es;
+    for (const Edge e : edges()) {
+      es.insert(E(source(e), target(e)));
+    }
+
+    std::vector<std::vector<int>> adj(node_count());
+    for (auto it = es.begin(); it != es.end(); it++) {
+      auto [u, v] = *it;
+      adj[u].push_back(v);
+      adj[v].push_back(u);
+    }
+
+    visited[v] = true;
+    tin[v] = low[v] = timer++;
+    bool parent_skipped = false;
+    for (int to : adj[v]) {
+      if (to == p && !parent_skipped) {
+        parent_skipped = true;
+        continue;
+      }
+      if (visited[to]) {
+        low[v] = std::min(low[v], tin[to]);
+      } else {
+        if (dfs(to, v)) {
+          return true;
+        }
+        low[v] = std::min(low[v], low[to]);
+        if (low[to] > tin[v] && es.count(E(v, to)) == 1)
+          return true;
+      }
+    }
+    return false;
+  };
+
+  for (int i = 0; i < node_count(); ++i) {
+    if (!visited[i] && dfs(i, -1))
+      return true;
+  }
+
+  return false;
+}
+
+void Multigraph::print() const {
+  std::cout << node_count() << "\n";
+  std::cout << edge_count() << "\n";
+  for (auto e : edges()) {
+    std::cout << source(e) << " " << target(e) << "\n";
+  }
+}
+
+bool Multigraph::maybe_isomorphic_with(const Multigraph &other) const {
+  std::array<int, 5> multiplicity_distr = {0, 0, 0, 0, 0};
+  std::array<int, 5> other_multiplicity_distr = {0, 0, 0, 0, 0};
+  for (int u = 0; u < node_count(); u++) {
+    for (int v = u; v < node_count(); v++) {
+      multiplicity_distr[adj_matrix_[u][v]]++;
+      other_multiplicity_distr[other.adj_matrix_[u][v]]++;
     }
   }
-};
+  for (int i = 0; i < multiplicity_distr.size(); i++) {
+    if (multiplicity_distr[i] != other_multiplicity_distr[i]) {
+      return false;
+    }
+  }
+  return true;
+}
 
 std::vector<Multigraph> generate_vacuum_graphs(int vertex_count) {
   std::vector<std::vector<Multigraph>> vacuums(vertex_count + 1);
@@ -298,9 +305,9 @@ int main(int argc, char *argv[]) {
       po::value<std::string>()->default_value("feynman")->notifier(
           [&](const std::string &s) {
             if (s == "feynman") {
-              graph_type = GraphType::FEYNMAN;
+              graph_type = GraphType::Feynman;
             } else if (s == "vacuum") {
-              graph_type = GraphType::VACUUM;
+              graph_type = GraphType::Vacuum;
             } else {
               throw po::validation_error(
                   po::validation_error::invalid_option_value, "type", s);
@@ -345,13 +352,13 @@ int main(int argc, char *argv[]) {
 
   std::cout << "Vertex count: " << vertex_count << "\n";
 
-  if (graph_type == GraphType::FEYNMAN) {
+  if (graph_type == GraphType::Feynman) {
     vertex_count++;
   }
 
   std::vector<Multigraph> vacuums = generate_vacuum_graphs(vertex_count);
 
-  if (graph_type == GraphType::FEYNMAN) {
+  if (graph_type == GraphType::Feynman) {
     std::vector<Multigraph> feynmans =
         generate_feynman_graphs(vertex_count, vacuums);
     std::cout << feynmans.size() << "\n";
