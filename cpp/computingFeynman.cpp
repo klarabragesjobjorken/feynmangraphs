@@ -297,13 +297,13 @@ generate_feynman_graphs(int vertex_count,
 
 class SvgGraphRenderer {
 public:
-  SvgGraphRenderer() : current_graph_idx_(0) {
+  SvgGraphRenderer(std::string name) : current_graph_idx_(0) {
     gvc_ = gvContext();
     if (!gvc_) {
       std::cerr << "Failed to initialize Graphviz context!\n";
       exit(1);
     }
-    g_ = agopen(const_cast<char *>("G"), Agundirected, nullptr);
+    g_ = agopen(name.data(), Agundirected, nullptr);
     agattr(g_, AGNODE, std::string("shape").data(),
            std::string("circle").data());
     agattr(g_, AGNODE, std::string("width").data(), std::string("0.2").data());
@@ -421,7 +421,7 @@ int main(int argc, char *argv[]) {
         generate_feynman_graphs(vertex_count, vacuums);
     if (vm.count("output")) {
       std::cout << "Drawing graphs as svg.\n";
-      SvgGraphRenderer svg_renderer;
+      SvgGraphRenderer svg_renderer("Feynman graphs");
       for (const Multigraph &multigraph : feynmans) {
         svg_renderer.add_graph(multigraph, GraphType::Feynman);
       }
@@ -430,7 +430,7 @@ int main(int argc, char *argv[]) {
     std::cout << "Generated " << feynmans.size() << " feynman graphs.\n";
   } else {
     if (vm.count("output")) {
-      SvgGraphRenderer svg_renderer;
+      SvgGraphRenderer svg_renderer("Vacuum graphs");
       for (const Multigraph &multigraph : vacuums) {
         svg_renderer.add_graph(multigraph, GraphType::Vacuum);
       }
